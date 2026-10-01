@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#1c1f26">
+<meta name="description" content="2048 小游戏：滑动合并相同数字，冲向 2048！微信内打开即玩，无需下载、离线可用。">
+<meta property="og:title" content="2048 小游戏">
+<meta property="og:description" content="滑动合并相同数字，冲向 2048！">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%23f59563'/%3E%3Ctext x='50' y='74' font-size='64' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'%3E2%3C/text%3E%3C/svg%3E">
+<title>2048 小游戏</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(160deg, #232733 0%, #1c1f26 60%, #171a20 100%);
+    background-attachment: fixed;
+    color: #e8eaf0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding: 12px;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    overflow-y: auto;
+    overscroll-behavior: none;
+  }
+  .container { width: 100%; max-width: 460px; }
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+  .title {
+    font-size: 44px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    background: linear-gradient(135deg, #f2b179, #f59563 45%, #f65e3b);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+  .scores { display: flex; gap: 8px; }
+  .score-box {
+    min-width: 76px;
+    padding: 8px 12px;
+    background: #2a2f3b;
+    border-radius: 10px;
+    text-align: center;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
+  }
+  .score-box.bump { animation: bump 150ms ease; }
+  @keyframes bump { 50% { transform: scale(1.1); } }
+  .score-box .label { font-size: 11px; color: #9aa3b5; letter-spacing: 2px; }
+  .score-box .value { font-size: 22px; font-weight: 800; color: #fff; line-height: 1.2; }
+  .controls { display: flex; gap: 8px; margin-bottom: 10px; }
+  .btn {
+    flex: 1;
+    padding: 10px 0;
+    border: none;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 700;
+    color: #fff;
+    background: #f59563;
+    cursor: pointer;
+    transition: filter .15s;
+    touch-action: manipulation;
+  }
+  .btn:active { filter: brightness(1.15); }
+  .btn:disabled { opacity: .45; }
+  .btn-ghost { background: #2a2f3b; }
+  .hint { text-align: center; color: #8d95a8; font-size: 13px; margin-bottom: 12px; }
+  .board {
+    position: relative;
+    width: 100%;
+    padding-bottom: 100%; /* 保持正方形，兼容老内核 */
+    background: #2a2f3b;
+    border-radius: 14px;
+    box-shadow: 0 12px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04);
+    touch-action: none;
+  }
+  .grid, .layer, .overlay {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(4, 1fr);
+    gap: 10px;
+    padding: 10px;
+  }
+  .cell { background: #333a49; border-radius: 8px; }
+  .tile {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 2;
+    transition: transform 120ms ease-in-out;
+    will-change: transform;
+  }
+  .face {
+    width: 100%;
+    height: 100%;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    line-height: 1;
+  }
+  .tile.new .face { animation: appear 180ms ease 60ms both; }
+  .tile.pop .face { animation: pop 200ms ease; }
+  @keyframes appear { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  @keyframes pop { 0% { transform: scale(1); } 45% { transform: scale(1.22); } 100% { transform: scale(1); } }
+  .tile-2 .face    { background: #eee4da; color: #776e65; }
+  .tile-4 .face    { background: #ede0c8; color: #776e65; }
+  .tile-8 .face    { background: #f2b179; color: #f9f6f2; }
+  .tile-16 .face   { background: #f59563; color: #f9f6f2; }
+  .tile-32 .face   { background: #f67c5f; color: #f9f6f2; }
+  .tile-64 .face   { background: #f65e3b; color: #f9f6f2; }
+  .tile-128 .face  { background: #edcf72; color: #f9f6f2; }
+  .tile-256 .face  { background: #edcc61; color: #f9f6f2; }
+  .tile-512 .face  { background: #edc850; color: #f9f6f2; }
+  .tile-1024 .face { background: #edc53f; color: #f9f6f2; }
+  .tile-2048 .face { background: #edc22e; color: #f9f6f2; box-shadow: 0 0 24px rgba(237,194,46,.5); }
+  .tile-super .face { background: #3c3a32; color: #f9f6f2; }
+  .overlay {
+    z-index: 10;
+    background: rgba(23, 26, 32, 0.8);
+    border-radius: 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    text-align: center;
+    padding: 20px;
+  }
+  .overlay.hidden { display: none; }
+  .overlay .msg { font-size: 30px; font-weight: 900; color: #fff; }
+  .overlay .sub { color: #aab2c2; font-size: 14px; }
+  .overlay .btn { flex: none; width: 70%; margin-top: 6px; }
+  .foot { text-align: center; color: #5c6472; font-size: 12px; margin-top: 14px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="top">
+    <h1 class="title">2048</h1>
+    <div class="scores">
+      <div class="score-box" id="score-box"><div class="label">分数</div><div class="value" id="score">0</div></div>
+      <div class="score-box"><div class="label">最佳</div><div class="value" id="best">0</div></div>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="btn" id="btn-new">新游戏</button>
+    <button class="btn btn-ghost" id="btn-undo" disabled>撤销</button>
+  </div>
+  <p class="hint">滑动屏幕或按方向键（WASD 也可），合并相同数字冲向 2048</p>
+  <div class="board" id="board">
+    <div class="grid" id="grid"></div>
+    <div class="layer" id="layer"></div>
+    <div class="overlay hidden" id="overlay">
+      <div class="msg" id="overlay-msg"></div>
+      <div class="sub" id="overlay-sub"></div>
+      <button class="btn" id="overlay-btn1"></button>
+      <button class="btn btn-ghost" id="overlay-btn2"></button>
+    </div>
+  </div>
+  <p class="foot">离线即玩 · 最高分自动保存在本机</p>
+</div>
+<script>
+'use strict';
+
+/* ================= 纯游戏逻辑（不依赖 DOM，可独立测试） ================= */
+var Logic = (function () {
+  var SIZE = 4;
+  var TARGET = 2048;
+
+  function emptyBoard() {
+    var b = [];
+    for (var r = 0; r < SIZE; r++) b.push([0, 0, 0, 0]);
+    return b;
+  }
+
+  function cloneBoard(b) {
+    return b.map(function (row) { return row.slice(); });
+  }
+
+  function availableCells(b) {
+    var cells = [];
+    for (var r = 0; r < SIZE; r++) {
+      for (var c = 0; c < SIZE; c++) {
+        if (b[r][c] === 0) cells.push({ r: r, c: c });
+      }
+    }
+    return cells;
+  }
+
+  // 在随机空格生成一个 2（90%）或 4（10%）；满盘返回 null
+  function addRandomTile(b, rand) {
+    rand = rand || Math.random;
+    var cells = availableCells(b);
+    if (cells.length === 0) return null;
+    var cell = cells[Math.floor(rand() * cells.length)];
+    var value = rand() < 0.9 ? 2 : 4;
+    b[cell.r][cell.c] = value;
+    return { r: cell.r, c: cell.c, value: value };
+  }
+
+  // 把一行数字朝下标 0 方向滑动合并。
+  // 返回 { result, slides: [{from,to}], merges: [{a,b,to,value}] }
+  function slideLine(vals) {
+    var result = [];
+    var slides = [];
+    var merges = [];
+    var nz = [];
+    var i, write;
+    for (i = 0; i < vals.length; i++) {
+      result.push(0);
+      if (vals[i] !== 0) nz.push({ v: vals[i], idx: i });
+    }
+    i = 0;
+    write = 0;
+    while (i < nz.length) {
+      var cur = nz[i];
+      if (i + 1 < nz.length && nz[i + 1].v === cur.v) {
+        var merged = cur.v * 2;
+        result[write] = merged;
+        merges.push({ a: cur.idx, b: nz[i + 1].idx, to: write, value: merged });
+        slides.push({ from: cur.idx, to: write });
+        slides.push({ from: nz[i + 1].idx, to: write });
+        i += 2;
+      } else {
+        result[write] = cur.v;
+        slides.push({ from: cur.idx, to: write });
+        i += 1;
+      }
+      write += 1;
+    }
+    return { result: result, slides: slides, merges: merges };
+  }
+
+  // 按方向取出所有"行"（按离边缘从近到远排序），backs 用于把下标映射回棋盘坐标
+  function getLines(b, dir) {
+    var lines = [];
+    var backs = [];
+    for (var i = 0; i < SIZE; i++) {
+      var line = [];
+      var back = [];
+      for (var k = 0; k < SIZE; k++) {
+        var r, c;
+        if (dir === 'left') { r = i; c = k; }
+        else if (dir === 'right') { r = i; c = SIZE - 1 - k; }
+        else if (dir === 'up') { r = k; c = i; }
+        else { r = SIZE - 1 - k; c = i; } /* down */
+        line.push({ r: r, c: c, v: b[r][c] });
+        back.push({ r: r, c: c });
+      }
+      lines.push(line);
+      backs.push(back);
+    }
+    return { lines: lines, backs: backs };
+  }
+
+  // 执行一次移动，返回新棋盘 + 计分 + 动画所需的完整轨迹
+  function move(b, dir) {
+    var gl = getLines(b, dir);
+    var next = emptyBoard();
+    var scoreGained = 0;
+    var slides = [];
+    var merges = [];
+    for (var li = 0; li < gl.lines.length; li++) {
+      var sl = slideLine(gl.lines[li].map(function (x) { return x.v; }));
+      for (var k = 0; k < SIZE; k++) {
+        var cell = gl.backs[li][k];
+        next[cell.r][cell.c] = sl.result[k];
+      }
+      for (var s = 0; s < sl.slides.length; s++) {
+        slides.push({ from: gl.lines[li][sl.slides[s].from], to: gl.backs[li][sl.slides[s].to] });
+      }
+      for (var m = 0; m < sl.merges.length; m++) {
+        var mg = sl.merges[m];
+        scoreGained += mg.value;
+        merges.push({
+          a: gl.lines[li][mg.a],
+          b: gl.lines[li][mg.b],
+          to: gl.backs[li][mg.to],
+          value: mg.value
+        });
+      }
+    }
+    var moved = slides.some(function (s) {
+      return s.from.r !== s.to.r || s.from.c !== s.to.c;
+    }) || merges.length > 0;
+    return {
+      board: next,
+      scoreGained: scoreGained,
+      moved: moved,
+      slides: slides,
+      merges: merges
+    };
+  }
+
+  // 根据移动轨迹算出每个棋子动画后的新位置（纯逻辑，UI 只负责播放动画）。
+  // tilesById: Map<id, {id, r, c}>，函数会原地更新其 r/c。
+  function resolveTiles(res, tilesById) {
+    var targetOf = new Map();
+    for (var i = 0; i < res.slides.length; i++) {
+      var s = res.slides[i];
+      targetOf.set(s.from.r + ',' + s.from.c, s.to);
+    }
+    var byCell = new Map();
+    tilesById.forEach(function (t) { byCell.set(t.r + ',' + t.c, t); });
+    var absorbed = new Set();
+    var survivors = [];
+    var placements = [];
+    for (var m = 0; m < res.merges.length; m++) {
+      var mg = res.merges[m];
+      var tA = byCell.get(mg.a.r + ',' + mg.a.c);
+      var tB = byCell.get(mg.b.r + ',' + mg.b.c);
+      if (!tA || !tB) continue;
+      absorbed.add(tB.id);
+      survivors.push({ tile: tA, value: mg.value, r: mg.to.r, c: mg.to.c });
+    }
+    tilesById.forEach(function (t) {
+      var target = targetOf.get(t.r + ',' + t.c);
+      if (!target) return;
+      if (target.r === t.r && target.c === t.c) return;
+      if (!absorbed.has(t.id)) {
+        t.r = target.r;
+        t.c = target.c;
+      }
+      placements.push({ tile: t, r: target.r, c: target.c });
+    });
+    return { placements: placements, absorbed: absorbed, survivors: survivors };
+  }
+
+  function hasWon(b) {
+    for (var r = 0; r < SIZE; r++) {
+      for (var c = 0; c < SIZE; c++) {
+        if (b[r][c] >= TARGET) return true;
+      }
+    }
+    return false;
+  }
+
+  function isGameOver(b) {
+    for (var r = 0; r < SIZE; r++) {
+      for (var c = 0; c < SIZE; c++) {
+        if (b[r][c] === 0) return false;
+        if (c + 1 < SIZE && b[r][c] === b[r][c + 1]) return false;
+        if (r + 1 < SIZE && b[r][c] === b[r + 1][c]) return false;
+      }
+    }
+    return true;
+  }
+
+  return {
+    SIZE: SIZE,
+    TARGET: TARGET,
+    emptyBoard: emptyBoard,
+    cloneBoard: cloneBoard,
+    availableCells: availableCells,
+    addRandomTile: addRandomTile,
+    slideLine: slideLine,
+    move: move,
+    resolveTiles: resolveTiles,
+    hasWon: hasWon,
+    isGameOver: isGameOver
+  };
+})();
+
+if (typeof window !== 'undefined') window.GAME = Logic;
+
+/* ================= 界面部分（仅浏览器中执行） ================= */
+if (typeof document !== 'undefined' && typeof window !== 'undefined') {
+  (function () {
+    var boardEl = document.getElementById('board');
+    if (!boardEl) return;
+    var layerEl = document.getElementById('layer');
+    var scoreEl = document.getElementById('score');
+    var bestEl = document.getElementById('best');
+    var scoreBoxEl = document.getElementById('score-box');
+    var overlayEl = document.getElementById('overlay');
+    var overlayMsg = document.getElementById('overlay-msg');
+    var overlaySub = document.getElementById('overlay-sub');
+    var overlayBtn1 = document.getElementById('overlay-btn1');
+    var overlayBtn2 = document.getElementById('overlay-btn2');
+    var btnNew = document.getElementById('btn-new');
+    var btnUndo = document.getElementById('btn-undo');
+    var gridEl = document.getElementById('grid');
+
+    var board = Logic.emptyBoard();
+    var score = 0;
+    var best = loadBest();
+    var tiles = new Map();
+    var nextTileId = 1;
+    var won = false;
+    var keepPlaying = false;
+    var gameOver = false;
+    var animating = false;
+    var pendingTimer = null;
+    var history = [];
+
+    // 背景 16 格
+    for (var i = 0; i < 16; i++) {
+      var cellEl = document.createElement('div');
+      cellEl.className = 'cell';
+      gridEl.appendChild(cellEl);
+    }
+
+    function loadBest() {
+      try {
+        var v = parseInt(window.localStorage.getItem('game2048_best') || '0', 10);
+        return isNaN(v) || v < 0 ? 0 : v;
+      } catch (e) { return 0; }
+    }
+
+    function saveBest() {
+      try { window.localStorage.setItem('game2048_best', String(best)); } catch (e) {}
+    }
+
+    function cellMetrics() {
+      var bw = boardEl.clientWidth || 320;
+      var pad = 10, gap = 10;
+      var cell = (bw - pad * 2 - gap * 3) / 4;
+      return { pad: pad, gap: gap, cell: cell };
+    }
+
+    function tilePos(r, c) {
+      var m = cellMetrics();
+      return {
+        x: m.pad + c * (m.cell + m.gap),
+        y: m.pad + r * (m.cell + m.gap),
+        size: m.cell
+      };
+    }
+
+    function fontFor(value, size) {
+      var n = String(value).length;
+      var ratio = n <= 2 ? 0.5 : (n === 3 ? 0.42 : (n === 4 ? 0.33 : 0.26));
+      return Math.round(size * ratio) + 'px';
+    }
+
+    function tileClass(value) {
+      return 'tile tile-' + (value <= 16384 ? value : 'super');
+    }
+
+    function createTileEl(t) {
+      var el = document.createElement('div');
+      el.className = tileClass(t.value) + (t.isNew ? ' new' : '');
+      var face = document.createElement('div');
+      face.className = 'face';
+      face.textContent = t.value;
+      el.appendChild(face);
+      layerEl.appendChild(el);
+      t.el = el;
+      placeTile(t, t.r, t.c);
+      return el;
+    }
+
+    function placeTile(t, r, c) {
+      var p = tilePos(r, c);
+      t.r = r;
+      t.c = c;
+      t.el.style.width = p.size + 'px';
+      t.el.style.height = p.size + 'px';
+      t.el.style.fontSize = fontFor(t.value, p.size);
+      t.el.style.transform = 'translate(' + p.x + 'px,' + p.y + 'px)';
+    }
+
+    function renderAll() {
+      for (var r = 0; r < Logic.SIZE; r++) {
+        for (var c = 0; c < Logic.SIZE; c++) {
+          var v = board[r][c];
+          if (v !== 0) {
+            var t = { id: nextTileId++, r: r, c: c, value: v, isNew: true };
+            tiles.set(t.id, t);
+            createTileEl(t);
+          }
+        }
+      }
+    }
+
+    function clearTiles() {
+      tiles.forEach(function (t) { t.el.remove(); });
+      tiles.clear();
+    }
+
+    function updateScoreUI(bump) {
+      scoreEl.textContent = score;
+      if (score > best) { best = score; saveBest(); }
+      bestEl.textContent = best;
+      if (bump) {
+        scoreBoxEl.classList.remove('bump');
+        void scoreBoxEl.offsetWidth; /* 重新触发动画 */
+        scoreBoxEl.classList.add('bump');
+      }
+    }
+
+    function updateUndoBtn() {
+      btnUndo.disabled = animating || history.length === 0;
+    }
+
+    function showOverlay(kind) {
+      if (kind === 'win') {
+        overlayMsg.textContent = '你赢了！';
+        overlaySub.textContent = '已达到 2048，可以继续挑战更高分';
+        overlayBtn1.textContent = '继续游戏';
+        overlayBtn2.textContent = '再来一局';
+      } else {
+        overlayMsg.textContent = '游戏结束';
+        overlaySub.textContent = '本局得分：' + score;
+        overlayBtn1.textContent = '再来一局';
+        overlayBtn2.textContent = '撤销一步';
+      }
+      overlayEl.classList.remove('hidden');
+    }
+
+    function hideOverlay() { overlayEl.classList.add('hidden'); }
+
+    function checkEndState() {
+      if (!won && Logic.hasWon(board)) {
+        won = true;
+        if (!keepPlaying) {
+          showOverlay('win');
+          return;
+        }
+      }
+      if (Logic.isGameOver(board)) {
+        gameOver = true;
+        showOverlay('lose');
+      }
+    }
+
+    function applyMove(res) {
+      if (!res.moved) return false;
+      history.push({ board: Logic.cloneBoard(board), score: score });
+      if (history.length > 60) history.shift();
+
+      var rt = Logic.resolveTiles(res, tiles);
+      for (var i = 0; i < rt.placements.length; i++) {
+        var p = rt.placements[i];
+        if (rt.absorbed.has(p.tile.id)) p.tile.el.style.zIndex = '1';
+        placeTile(p.tile, p.r, p.c);
+      }
+      board = res.board;
+      score += res.scoreGained;
+      updateScoreUI(res.scoreGained > 0);
+      if (res.scoreGained > 0 && typeof navigator !== 'undefined' && navigator.vibrate) {
+        try { navigator.vibrate(10); } catch (e) {}
+      }
+      animating = true;
+      updateUndoBtn();
+      pendingTimer = setTimeout(function () {
+        pendingTimer = null;
+        for (var s = 0; s < rt.survivors.length; s++) {
+          var sv = rt.survivors[s];
+          var t = sv.tile;
+          t.value = sv.value;
+          t.el.className = tileClass(sv.value) + ' pop';
+          t.el.querySelector('.face').textContent = sv.value;
+          t.el.style.zIndex = '';
+          placeTile(t, sv.r, sv.c);
+          (function (el) {
+            setTimeout(function () { el.classList.remove('pop'); }, 220);
+          })(t.el);
+        }
+        rt.absorbed.forEach(function (id) {
+          var t = tiles.get(id);
+          if (t) { t.el.remove(); tiles.delete(id); }
+        });
+        var spawned = Logic.addRandomTile(board);
+        if (spawned) {
+          var nt = { id: nextTileId++, r: spawned.r, c: spawned.c, value: spawned.value, isNew: true };
+          tiles.set(nt.id, nt);
+          createTileEl(nt);
+        }
+        animating = false;
+        updateUndoBtn();
+        checkEndState();
+      }, 140);
+      return true;
+    }
+
+    function tryMove(dir) {
+      if (animating || gameOver || !overlayEl.classList.contains('hidden')) return;
+      applyMove(Logic.move(board, dir));
+    }
+
+    function newGame() {
+      if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }
+      board = Logic.emptyBoard();
+      score = 0;
+      history.length = 0;
+      won = false;
+      keepPlaying = false;
+      gameOver = false;
+      animating = false;
+      clearTiles();
+      Logic.addRandomTile(board);
+      Logic.addRandomTile(board);
+      renderAll();
+      hideOverlay();
+      updateScoreUI(false);
+      updateUndoBtn();
+    }
+
+    function undo() {
+      if (animating || history.length === 0) return;
+      var snap = history.pop();
+      board = snap.board;
+      score = snap.score;
+      won = Logic.hasWon(board);
+      gameOver = false;
+      clearTiles();
+      renderAll();
+      hideOverlay();
+      updateScoreUI(false);
+      updateUndoBtn();
+    }
+
+    btnNew.addEventListener('click', newGame);
+    btnUndo.addEventListener('click', undo);
+
+    overlayBtn1.addEventListener('click', function () {
+      if (overlayBtn1.textContent === '继续游戏') {
+        keepPlaying = true;
+        hideOverlay();
+        checkEndState();
+      } else {
+        newGame();
+      }
+    });
+    overlayBtn2.addEventListener('click', function () {
+      if (overlayBtn2.textContent === '撤销一步') undo();
+      else newGame();
+    });
+
+    document.addEventListener('keydown', function (e) {
+      var map = {
+        ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down',
+        a: 'left', d: 'right', w: 'up', s: 'down',
+        A: 'left', D: 'right', W: 'up', S: 'down'
+      };
+      var dir = map[e.key];
+      if (dir) {
+        e.preventDefault();
+        tryMove(dir);
+      }
+    });
+
+    // 触摸滑动（微信内主要操作方式）
+    var touchStart = null;
+    boardEl.addEventListener('touchstart', function (e) {
+      if (e.touches.length !== 1) return;
+      touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    }, { passive: true });
+    boardEl.addEventListener('touchmove', function (e) {
+      e.preventDefault();
+    }, { passive: false });
+    boardEl.addEventListener('touchend', function (e) {
+      if (!touchStart) return;
+      var t = e.changedTouches[0];
+      var dx = t.clientX - touchStart.x;
+      var dy = t.clientY - touchStart.y;
+      touchStart = null;
+      var ax = Math.abs(dx), ay = Math.abs(dy);
+      if (Math.max(ax, ay) < 24) return;
+      var dir = ax > ay ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
+      tryMove(dir);
+    });
+    boardEl.addEventListener('touchcancel', function () { touchStart = null; });
+    boardEl.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+    window.addEventListener('resize', function () {
+      tiles.forEach(function (t) { placeTile(t, t.r, t.c); });
+    });
+
+    newGame();
+  })();
+}
+</script>
+</body>
+</html>
